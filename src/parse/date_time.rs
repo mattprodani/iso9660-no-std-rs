@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: (MIT OR Apache-2.0)
 
+use alloc::str;
+use core::convert::TryFrom;
 use nom::bytes::complete::take;
 use nom::combinator::map_res;
 use nom::number::complete::le_u8;
 use nom::sequence::tuple;
 use nom::IResult;
-use std::convert::TryFrom;
-use std::str;
 use time::{Date, OffsetDateTime, PrimitiveDateTime, Time, UtcOffset};
 
 pub fn date_time(i: &[u8]) -> IResult<&[u8], OffsetDateTime> {

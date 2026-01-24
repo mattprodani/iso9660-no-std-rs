@@ -2,11 +2,28 @@
 
 extern crate iso9660;
 
+use embedded_io::Read;
 use std::fs::File;
-use std::io::{self, Read, Write};
+use std::io::{self, Read as _, Seek as _, Write as _};
 use std::{env, process};
 
 use iso9660::{DirectoryEntry, ISO9660};
+
+struct MyFile(File);
+impl embedded_io::ErrorType for MyFile {
+    type Error = std::io::Error;
+}
+
+impl embedded_io::Read for MyFile {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+        self.0.read(buf)
+    }
+}
+impl embedded_io::Seek for MyFile {
+    fn seek(&mut self, pos: embedded_io::SeekFrom) -> Result<u64, Self::Error> {
+        self.0.seek(pos.into())
+    }
+}
 
 fn main() {
     let args = env::args();
@@ -20,14 +37,16 @@ fn main() {
     let file_path = env::args().nth(2).unwrap();
 
     let file = File::open(iso_path).unwrap();
-    let fs = ISO9660::new(file).unwrap();
+    let fs = ISO9660::new(MyFile(file)).unwrap();
 
     match fs.open(&file_path).unwrap() {
         Some(DirectoryEntry::File(file)) => {
             let mut stdout = io::stdout();
-            let mut text = Vec::new();
-            file.read().read_to_end(&mut text).unwrap();
-            stdout.write_all(&text).unwrap();
+            let mut buf = vec![0; 200];
+            let mut reader = file.read();
+            dbg!(reader.read(&mut buf).unwrap());
+
+            stdout.write_all(&buf).unwrap();
         }
         Some(_) => panic!("{} is not a file.", file_path),
         None => panic!("'{}' not found", file_path),

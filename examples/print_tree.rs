@@ -3,9 +3,28 @@
 extern crate iso9660;
 
 use std::fs::File;
+use std::io::{Read as _, Seek as _};
 use std::{env, process};
 
 use iso9660::{DirectoryEntry, ISO9660Reader, ISODirectory, ISO9660};
+
+struct MyFile(File);
+impl embedded_io::ErrorType for MyFile {
+    type Error = embedded_io::ErrorKind;
+}
+
+impl embedded_io::Read for MyFile {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, embedded_io::ErrorKind> {
+        self.0.read(buf).map_err(|_| embedded_io::ErrorKind::Other)
+    }
+}
+impl embedded_io::Seek for MyFile {
+    fn seek(&mut self, pos: embedded_io::SeekFrom) -> Result<u64, Self::Error> {
+        self.0
+            .seek(pos.into())
+            .map_err(|_| embedded_io::ErrorKind::Other)
+    }
+}
 
 fn main() {
     let args = env::args();
@@ -20,7 +39,7 @@ fn main() {
     let dirpath = args.next();
 
     let file = File::open(path).unwrap();
-    let fs = ISO9660::new(file).unwrap();
+    let fs = ISO9660::new(MyFile(file)).unwrap();
 
     if let Some(dirpath) = dirpath {
         match fs.open(&dirpath).unwrap() {

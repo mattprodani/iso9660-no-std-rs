@@ -4,10 +4,12 @@ pub use self::isodirectory::{ISODirectory, ISODirectoryIterator};
 pub use self::isofile::{ISOFile, ISOFileReader};
 
 use crate::parse::{DirectoryEntryHeader, FileFlags};
-use crate::{FileRef, ISO9660Reader, Result};
+use crate::{FileRef, ISO9660Reader, ISOError};
+use alloc::string::String;
 
 mod isodirectory;
 mod isofile;
+mod volume;
 
 #[derive(Clone, Debug)]
 pub enum DirectoryEntry<T: ISO9660Reader> {
@@ -20,7 +22,7 @@ impl<T: ISO9660Reader> DirectoryEntry<T> {
         header: DirectoryEntryHeader,
         identifier: String,
         file: FileRef<T>,
-    ) -> Result<Self> {
+    ) -> Result<Self, ISOError<T::Error>> {
         if header.file_flags.contains(FileFlags::DIRECTORY) {
             Ok(DirectoryEntry::Directory(ISODirectory::new(
                 header, identifier, file,

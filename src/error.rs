@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: (MIT OR Apache-2.0)
 
-use std::error::Error;
-use std::fmt::{self, Display};
-use std::num::ParseIntError;
-use std::{io, str};
+use alloc::str;
+use core::error::Error;
+use core::fmt::{self, Display};
+use core::num::ParseIntError;
 
 #[derive(Debug)]
-pub enum ISOError {
-    Io(io::Error),
+pub enum ISOError<T> {
+    Io(T),
+    Eio(embedded_io::ErrorKind),
     Utf8(str::Utf8Error),
     InvalidFs(&'static str),
     ParseInt(ParseIntError),
@@ -15,10 +16,11 @@ pub enum ISOError {
     Nom(nom::error::ErrorKind),
 }
 
-impl Display for ISOError {
+impl<T: core::fmt::Debug> Display for ISOError<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            ISOError::Io(ref err) => write!(f, "IO error: {}", err),
+            ISOError::Io(ref err) => write!(f, "IO error: {:?}", err),
+            ISOError::Eio(ref err) => write!(f, "IO error: {}", err),
             ISOError::Utf8(ref err) => write!(f, "UTF8 error: {}", err),
             ISOError::InvalidFs(msg) => write!(f, "Invalid ISO9660: {}", msg),
             ISOError::ParseInt(ref err) => write!(f, "Int parse error: {}", err),
@@ -32,7 +34,7 @@ impl Display for ISOError {
     }
 }
 
-impl Error for ISOError {
+impl<T: core::error::Error> Error for ISOError<T> {
     fn cause(&self) -> Option<&dyn Error> {
         match *self {
             ISOError::Io(ref err) => Some(err),
@@ -45,20 +47,21 @@ impl Error for ISOError {
 
 macro_rules! impl_from_error {
     ($t:ty, $e:expr) => {
-        impl From<$t> for ISOError {
-            fn from(err: $t) -> ISOError {
+        impl<T> From<$t> for ISOError<T> {
+            fn from(err: $t) -> ISOError<T> {
                 $e(err)
             }
         }
     };
 }
 
-impl_from_error!(io::Error, ISOError::Io);
+// impl_from_error!(io::Error, ISOError::Io);
+impl_from_error!(embedded_io::ErrorKind, ISOError::Eio);
 impl_from_error!(str::Utf8Error, ISOError::Utf8);
 impl_from_error!(ParseIntError, ISOError::ParseInt);
 
-impl From<nom::Err<nom::error::Error<&[u8]>>> for ISOError {
-    fn from(err: nom::Err<nom::error::Error<&[u8]>>) -> ISOError {
+impl<T> From<nom::Err<nom::error::Error<&[u8]>>> for ISOError<T> {
+    fn from(err: nom::Err<nom::error::Error<&[u8]>>) -> ISOError<T> {
         ISOError::Nom(match err {
             nom::Err::Error(e) | nom::Err::Failure(e) => e.code,
             nom::Err::Incomplete(_) => panic!(), // XXX

@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: (MIT OR Apache-2.0)
 
-use std::{fmt, str};
+use alloc::str;
+use alloc::string::{String, ToString};
+use core::fmt;
 
 use time::OffsetDateTime;
 
 use crate::parse::{DirectoryEntryHeader, FileFlags};
-use crate::{DirectoryEntry, FileRef, ISO9660Reader, ISOError, Result};
+use crate::{DirectoryEntry, FileRef, ISO9660Reader, ISOError};
 
 pub struct ISODirectory<T: ISO9660Reader> {
     pub(crate) header: DirectoryEntryHeader,
@@ -53,7 +55,7 @@ impl<T: ISO9660Reader> ISODirectory<T> {
 
     pub fn block_count(&self) -> u32 {
         let len = self.header.extent_length;
-        (len + 2048 - 1) / 2048 // ceil(len / 2048)
+        len.div_ceil(2048) // ceil(len / 2048)
     }
 
     pub fn read_entry_at(
@@ -61,13 +63,13 @@ impl<T: ISO9660Reader> ISODirectory<T> {
         block: &mut [u8; 2048],
         buf_block_num: &mut Option<u64>,
         offset: u64,
-    ) -> Result<(DirectoryEntry<T>, Option<u64>)> {
+    ) -> Result<(DirectoryEntry<T>, Option<u64>), ISOError<T::Error>> {
         let mut block_num = offset / 2048;
         let mut block_pos = (offset % 2048) as usize;
 
         if buf_block_num != &Some(block_num) {
             let lba = self.header.extent_loc as u64 + block_num;
-            let count = self.file.read_at(block, lba)?;
+            let count = self.file.read_at(block, lba).map_err(ISOError::Io)?;
 
             if count != 2048 {
                 *buf_block_num = None;
@@ -97,7 +99,7 @@ impl<T: ISO9660Reader> ISODirectory<T> {
         Ok((entry, next_offset))
     }
 
-    pub fn contents(&self) -> ISODirectoryIterator<T> {
+    pub fn contents(&'_ self) -> ISODirectoryIterator<'_, T> {
         ISODirectoryIterator {
             directory: self,
             block: [0; 2048],
@@ -110,7 +112,7 @@ impl<T: ISO9660Reader> ISODirectory<T> {
         self.header.time
     }
 
-    pub fn find(&self, identifier: &str) -> Result<Option<DirectoryEntry<T>>> {
+    pub fn find(&self, identifier: &str) -> Result<Option<DirectoryEntry<T>>, ISOError<T::Error>> {
         for entry in self.contents() {
             let entry = entry?;
             if entry
@@ -127,6 +129,24 @@ impl<T: ISO9660Reader> ISODirectory<T> {
 
         Ok(None)
     }
+
+    pub fn open(&self, path: &str) -> Result<Option<DirectoryEntry<T>>, ISOError<T::Error>> {
+        // TODO: avoid clone()
+        let mut entry = DirectoryEntry::Directory(self.clone());
+        for segment in path.split('/').filter(|x| !x.is_empty()) {
+            let parent = match entry {
+                DirectoryEntry::Directory(dir) => dir,
+                _ => return Ok(None),
+            };
+
+            entry = match parent.find(segment)? {
+                Some(entry) => entry,
+                None => return Ok(None),
+            };
+        }
+
+        Ok(Some(entry))
+    }
 }
 
 pub struct ISODirectoryIterator<'a, T: ISO9660Reader> {
@@ -137,9 +157,9 @@ pub struct ISODirectoryIterator<'a, T: ISO9660Reader> {
 }
 
 impl<'a, T: ISO9660Reader> Iterator for ISODirectoryIterator<'a, T> {
-    type Item = Result<DirectoryEntry<T>>;
+    type Item = Result<DirectoryEntry<T>, ISOError<T::Error>>;
 
-    fn next(&mut self) -> Option<Result<DirectoryEntry<T>>> {
+    fn next(&mut self) -> Option<Self::Item> {
         let offset = self.next_offset?;
         match self
             .directory

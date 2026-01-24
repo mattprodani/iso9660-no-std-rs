@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: (MIT OR Apache-2.0)
 
+use alloc::str;
+use alloc::string::String;
+use alloc::string::ToString;
+use alloc::vec::Vec;
 use nom::bytes::complete::{tag, take};
 use nom::combinator::{map, map_res};
 use nom::number::complete::*;
 use nom::sequence::tuple;
 use nom::IResult;
-use std::str;
 use time::OffsetDateTime;
 
 use super::both_endian::{both_endian16, both_endian32};
@@ -13,7 +16,10 @@ use super::date_time::date_time_ascii;
 use super::directory_entry::{directory_entry, DirectoryEntryHeader};
 use crate::ISOError;
 
+// frankly I think these variants should be holding a struct rather than
+// being struct variants. otherwise waste of space.
 #[allow(dead_code)]
+#[allow(clippy::enum_variant_names)]
 #[derive(Clone, Debug)]
 pub(crate) enum VolumeDescriptor {
     Primary {
@@ -51,11 +57,72 @@ pub(crate) enum VolumeDescriptor {
         boot_identifier: String,
         data: Vec<u8>,
     },
+    SupplementaryVolumeDescriptor {
+        type_: u8,
+        version: u8,
+        flags: u8,
+        is_joliet: bool,
+    },
     VolumeDescriptorSetTerminator,
 }
 
+pub fn supplementary_volume_descriptor(input: &[u8]) -> IResult<&[u8], VolumeDescriptor> {
+    let (input, type_) = u8(input)?;
+    let (input, id) = take(5usize)(input)?;
+    let (input, version) = u8(input)?;
+    let (input, flags) = u8(input)?;
+
+    // Skip to escape_sequences at offset 88
+    // We're at offset 7, need to skip 81 bytes
+    let (input, _) = take(81usize)(input)?;
+
+    let (input, escape_seq) = take(32usize)(input)?;
+
+    let mut id_arr = [0u8; 5];
+    id_arr.copy_from_slice(id);
+
+    let mut esc_arr = [0u8; 4];
+    esc_arr.copy_from_slice(escape_seq);
+    let is_joliet = type_ == 2
+        && id == b"CD001"
+        && version == 1
+        && (escape_seq.starts_with(b"%/@")
+            || escape_seq.starts_with(b"%/C")
+            || escape_seq.starts_with(b"%/E"));
+
+    Ok((
+        input,
+        VolumeDescriptor::SupplementaryVolumeDescriptor {
+            type_,
+            version,
+            flags,
+            is_joliet,
+        },
+    ))
+}
+//
+// pub fn is_joliet(vd: &VolumeDescriptor) -> bool {
+//     match vd {
+//         VolumeDescriptor::SupplementaryVolumeDescriptor {
+//             type_,
+//             id,
+//             version,
+//             flags: _,
+//             escape_sequences,
+//         } => {
+//             *type_ == 2
+//                 && id == b"CD001"
+//                 && *version == 1
+//                 && (escape_sequences.starts_with(b"%/@")
+//                     || escape_sequences.starts_with(b"%/C")
+//                     || escape_sequences.starts_with(b"%/E"))
+//         }
+//         _ => false,
+//     }
+// }
+//
 impl VolumeDescriptor {
-    pub fn parse(bytes: &[u8]) -> Result<Option<VolumeDescriptor>, ISOError> {
+    pub fn parse<E>(bytes: &[u8]) -> Result<Option<VolumeDescriptor>, ISOError<E>> {
         Ok(volume_descriptor(bytes)?.1)
     }
 }
@@ -91,7 +158,7 @@ fn volume_descriptor(i: &[u8]) -> IResult<&[u8], Option<VolumeDescriptor>> {
     match type_code {
         0 => map(boot_record, Some)(i),
         1 => map(primary_descriptor, Some)(i),
-        //2 => map(supplementary_volume_descriptor, Some)(i),
+        2 => map(supplementary_volume_descriptor, Some)(i),
         //3 => map!(volume_partition_descriptor, Some)(i),
         255 => Ok((i, Some(VolumeDescriptor::VolumeDescriptorSetTerminator))),
         _ => Ok((i, None)),

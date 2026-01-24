@@ -2,14 +2,17 @@
 
 use time::OffsetDateTime;
 
+use crate::ISOError;
+
 use super::both_endian::{both_endian16, both_endian32};
 use super::date_time::date_time;
-use crate::Result;
+use alloc::str;
+use alloc::string::String;
+use alloc::string::ToString;
 use nom::combinator::{map, map_res};
 use nom::multi::length_data;
 use nom::number::complete::le_u8;
 use nom::IResult;
-use std::str;
 
 bitflags! {
     #[derive(Clone, Debug)]
@@ -38,11 +41,24 @@ pub struct DirectoryEntryHeader {
 }
 
 impl DirectoryEntryHeader {
-    pub fn parse(input: &[u8]) -> Result<(DirectoryEntryHeader, String)> {
+    pub fn parse<E>(input: &[u8]) -> Result<(DirectoryEntryHeader, String), ISOError<E>> {
         Ok(directory_entry(input)?.1)
     }
 }
 
+pub struct DirectoryEntryInfo {
+    pub header: DirectoryEntryHeader,
+    pub reader: DirectoryEntryReader,
+}
+
+pub enum DirectoryEntryReader {
+    /// Directory entry provided by Primary Volume Descriptor
+    Primary,
+    /// Joliet extensions
+    Joliet,
+}
+
+impl DirectoryEntryReader {}
 pub fn directory_entry(i: &[u8]) -> IResult<&[u8], (DirectoryEntryHeader, String)> {
     let (i, length) = le_u8(i)?;
     let (i, extended_attribute_record_length) = le_u8(i)?;
