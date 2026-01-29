@@ -13,11 +13,11 @@ use time::OffsetDateTime;
 
 use super::both_endian::{both_endian16, both_endian32};
 use super::date_time::date_time_ascii;
-use super::directory_entry::{directory_entry, DirectoryEntryHeader};
+use super::directory_entry::{
+    directory_entry, directory_entry_with_reader, DirectoryEntryHeader, DirectoryEntryReader,
+};
 use crate::ISOError;
 
-// frankly I think these variants should be holding a struct rather than
-// being struct variants. otherwise waste of space.
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub(crate) struct PrimaryVolumeDescriptor {
@@ -66,72 +66,21 @@ pub(crate) struct SupplementaryVolumeDescriptor {
     pub version: u8,
     pub flags: u8,
     pub is_joliet: bool,
+    pub root_directory_entry: DirectoryEntryHeader,
+    pub root_directory_entry_identifier: String,
 }
 #[allow(dead_code)]
 #[allow(clippy::enum_variant_names)]
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug)]
 pub(crate) enum VolumeDescriptor {
     Primary(PrimaryVolumeDescriptor),
     BootRecord(BootRecordDescriptor),
+    #[cfg(feature = "joliet")]
     SupplementaryVolumeDescriptor(SupplementaryVolumeDescriptor),
     VolumeDescriptorSetTerminator,
 }
 
-pub fn supplementary_volume_descriptor(input: &[u8]) -> IResult<&[u8], VolumeDescriptor> {
-    let (input, type_) = u8(input)?;
-    let (input, id) = take(5usize)(input)?;
-    let (input, version) = u8(input)?;
-    let (input, flags) = u8(input)?;
-
-    // Skip to escape_sequences at offset 88
-    // We're at offset 7, need to skip 81 bytes
-    let (input, _) = take(81usize)(input)?;
-
-    let (input, escape_seq) = take(32usize)(input)?;
-
-    let mut id_arr = [0u8; 5];
-    id_arr.copy_from_slice(id);
-
-    let mut esc_arr = [0u8; 4];
-    esc_arr.copy_from_slice(escape_seq);
-    let is_joliet = type_ == 2
-        && id == b"CD001"
-        && version == 1
-        && (escape_seq.starts_with(b"%/@")
-            || escape_seq.starts_with(b"%/C")
-            || escape_seq.starts_with(b"%/E"));
-
-    Ok((
-        input,
-        VolumeDescriptor::SupplementaryVolumeDescriptor(SupplementaryVolumeDescriptor {
-            type_,
-            version,
-            flags,
-            is_joliet,
-        }),
-    ))
-}
-//
-// pub fn is_joliet(vd: &VolumeDescriptor) -> bool {
-//     match vd {
-//         VolumeDescriptor::SupplementaryVolumeDescriptor {
-//             type_,
-//             id,
-//             version,
-//             flags: _,
-//             escape_sequences,
-//         } => {
-//             *type_ == 2
-//                 && id == b"CD001"
-//                 && *version == 1
-//                 && (escape_sequences.starts_with(b"%/@")
-//                     || escape_sequences.starts_with(b"%/C")
-//                     || escape_sequences.starts_with(b"%/E"))
-//         }
-//         _ => false,
-//     }
-// }
-//
 impl VolumeDescriptor {
     pub fn parse<E>(bytes: &[u8]) -> Result<Option<VolumeDescriptor>, ISOError<E>> {
         Ok(volume_descriptor(bytes)?.1)
@@ -169,11 +118,48 @@ fn volume_descriptor(i: &[u8]) -> IResult<&[u8], Option<VolumeDescriptor>> {
     match type_code {
         0 => map(boot_record, Some)(i),
         1 => map(primary_descriptor, Some)(i),
-        2 => map(supplementary_volume_descriptor, Some)(i),
+        #[cfg(feature = "joliet")]
+        2 => map(supplementary_descriptor, Some)(i),
         //3 => map!(volume_partition_descriptor, Some)(i),
         255 => Ok((i, Some(VolumeDescriptor::VolumeDescriptorSetTerminator))),
         _ => Ok((i, None)),
     }
+}
+
+#[cfg(feature = "joliet")]
+fn supplementary_descriptor(i: &[u8]) -> IResult<&[u8], VolumeDescriptor> {
+    let input = i;
+    let (i, flags) = le_u8(i)?;
+    let (i, _) = take(32usize)(i)?; // system_identifier
+    let (i, _) = take(32usize)(i)?; // volume_identifier
+    let (i, _) = take(8usize)(i)?; // padding
+    let (i, _) = take(8usize)(i)?; // volume_space_size
+    let (i, _) = take(32usize)(i)?; // padding
+    let (i, _) = take(4usize)(i)?; // volume_set_size
+    let (i, _) = take(4usize)(i)?; // volume_sequence_number
+    let (i, _) = take(4usize)(i)?; // logical_block_size
+    let (i, _) = take(8usize)(i)?; // path_table_size
+    let (i, _) = take(4usize)(i)?; // path_table_loc
+    let (i, _) = take(4usize)(i)?; // optional_path_table_loc
+    let (i, _) = take(8usize)(i)?; // path_table_loc_be + optional_path_table_loc_be
+    let (i, root_directory_entry) = directory_entry_with_reader(i, DirectoryEntryReader::Joliet)?;
+
+    let escape_sequences = input.get(81..113).unwrap_or(&[]);
+    let is_joliet = escape_sequences.starts_with(b"%/@")
+        || escape_sequences.starts_with(b"%/C")
+        || escape_sequences.starts_with(b"%/E");
+
+    Ok((
+        i,
+        VolumeDescriptor::SupplementaryVolumeDescriptor(SupplementaryVolumeDescriptor {
+            type_: 2,
+            version: 1,
+            flags,
+            is_joliet,
+            root_directory_entry: root_directory_entry.0,
+            root_directory_entry_identifier: root_directory_entry.1,
+        }),
+    ))
 }
 
 fn primary_descriptor(i: &[u8]) -> IResult<&[u8], VolumeDescriptor> {

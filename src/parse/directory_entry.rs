@@ -9,6 +9,7 @@ use super::date_time::date_time;
 use alloc::str;
 use alloc::string::String;
 use alloc::string::ToString;
+use core::char;
 use nom::combinator::{map, map_res};
 use nom::multi::length_data;
 use nom::number::complete::le_u8;
@@ -41,16 +42,15 @@ pub struct DirectoryEntryHeader {
 }
 
 impl DirectoryEntryHeader {
-    pub fn parse<E>(input: &[u8]) -> Result<(DirectoryEntryHeader, String), ISOError<E>> {
-        Ok(directory_entry(input)?.1)
+    pub fn parse<E>(
+        input: &[u8],
+        reader: DirectoryEntryReader,
+    ) -> Result<(DirectoryEntryHeader, String), ISOError<E>> {
+        Ok(directory_entry_with_reader(input, reader)?.1)
     }
 }
 
-pub struct DirectoryEntryInfo {
-    pub header: DirectoryEntryHeader,
-    pub reader: DirectoryEntryReader,
-}
-
+#[derive(Clone, Copy, Debug)]
 pub enum DirectoryEntryReader {
     /// Directory entry provided by Primary Volume Descriptor
     Primary,
@@ -59,7 +59,35 @@ pub enum DirectoryEntryReader {
 }
 
 impl DirectoryEntryReader {}
+
+fn decode_ucs2_be(bytes: &[u8]) -> String {
+    let mut decoded = String::new();
+    let mut iter = bytes.chunks_exact(2);
+    for chunk in iter.by_ref() {
+        let code = u16::from_be_bytes([chunk[0], chunk[1]]);
+        match char::from_u32(code as u32) {
+            Some(value) => decoded.push(value),
+            None => decoded.push('\u{FFFD}'),
+        }
+    }
+    let remainder = iter.remainder();
+    if remainder.len() == 1 {
+        match char::from_u32(remainder[0] as u32) {
+            Some(value) => decoded.push(value),
+            None => decoded.push('\u{FFFD}'),
+        }
+    }
+    decoded
+}
+
 pub fn directory_entry(i: &[u8]) -> IResult<&[u8], (DirectoryEntryHeader, String)> {
+    directory_entry_with_reader(i, DirectoryEntryReader::Primary)
+}
+
+pub fn directory_entry_with_reader(
+    i: &[u8],
+    reader: DirectoryEntryReader,
+) -> IResult<&[u8], (DirectoryEntryHeader, String)> {
     let (i, length) = le_u8(i)?;
     let (i, extended_attribute_record_length) = le_u8(i)?;
     let (i, extent_loc) = both_endian32(i)?;
@@ -69,7 +97,12 @@ pub fn directory_entry(i: &[u8]) -> IResult<&[u8], (DirectoryEntryHeader, String
     let (i, file_unit_size) = le_u8(i)?;
     let (i, interleave_gap_size) = le_u8(i)?;
     let (i, volume_sequence_number) = both_endian16(i)?;
-    let (i, identifier) = map(map_res(length_data(le_u8), str::from_utf8), str::to_string)(i)?;
+    let (i, identifier) = match reader {
+        DirectoryEntryReader::Primary => {
+            map(map_res(length_data(le_u8), str::from_utf8), str::to_string)(i)?
+        }
+        DirectoryEntryReader::Joliet => map(length_data(le_u8), decode_ucs2_be)(i)?,
+    };
     // After the file identifier, ISO 9660 allows addition space for
     // system use. Ignore that for now.
 

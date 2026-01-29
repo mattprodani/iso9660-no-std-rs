@@ -25,6 +25,22 @@ impl embedded_io::Seek for MyFile {
 }
 
 #[test]
+fn test_dir_joliet() {
+    let fs = ISO9660::new(MyFile(File::open("test_joliet.iso").unwrap())).unwrap();
+
+    let mut iter = fs.root.contents();
+    assert_eq!(iter.next().unwrap().unwrap().identifier(), ".");
+    assert_eq!(iter.next().unwrap().unwrap().identifier(), "..");
+    assert_eq!(iter.next().unwrap().unwrap().identifier(), "A");
+    assert_eq!(iter.next().unwrap().unwrap().identifier(), "GPL_3_0.TXT");
+    assert_eq!(
+        iter.next().unwrap().unwrap().identifier(),
+        "GPL_LONG_FILENAME.TXT"
+    );
+    assert!(iter.next().is_none());
+}
+
+#[test]
 fn test_dir() {
     let fs = ISO9660::new(MyFile(File::open("test.iso").unwrap())).unwrap();
 

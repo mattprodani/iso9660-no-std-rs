@@ -28,5 +28,6 @@ fuser = "0.13"
 libc = "0.2"
 
 [features]
-default = ["std"]
+default = ["std", "joliet"]
+joliet = []
 std = ["embedded-io/std"]

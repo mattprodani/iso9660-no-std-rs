@@ -16,7 +16,7 @@ pub use directory_entry::{
 pub use error::ISOError;
 pub(crate) use fileref::FileRef;
 pub use fileref::ISO9660Reader;
-use parse::VolumeDescriptor;
+use parse::{DirectoryEntryReader, VolumeDescriptor};
 
 mod directory_entry;
 mod error;
@@ -48,6 +48,7 @@ impl<T: ISO9660Reader> ISO9660<T> {
         let mut buf: [u8; 2048] = [0; 2048];
         let mut root = None;
         let mut primary = None;
+        let mut entry_reader = DirectoryEntryReader::Primary;
 
         // Skip the "system area"
         let mut lba = 16;
@@ -76,6 +77,16 @@ impl<T: ISO9660Reader> ISO9660<T> {
                     ));
                     primary = descriptor;
                 }
+                #[cfg(feature = "joliet")]
+                Some(VolumeDescriptor::SupplementaryVolumeDescriptor(svd)) => {
+                    if svd.is_joliet {
+                        root = Some((
+                            svd.root_directory_entry.clone(),
+                            svd.root_directory_entry_identifier.clone(),
+                        ));
+                        entry_reader = DirectoryEntryReader::Joliet;
+                    }
+                }
                 Some(VolumeDescriptor::VolumeDescriptorSetTerminator) => break,
                 _ => {}
             }
@@ -83,21 +94,17 @@ impl<T: ISO9660Reader> ISO9660<T> {
             lba += 1;
         }
 
-        let file = FileRef::new(reader);
-        let file2 = file.clone();
-
-        let (root, primary) = match (root, primary) {
-            (Some(root), Some(primary)) => (root, primary),
-            _ => {
-                return Err(ISOError::InvalidFs("No primary volume descriptor"));
-            }
-        };
-
-        Ok(ISO9660 {
-            _file: file,
-            root: ISODirectory::new(root.0, root.1, file2),
-            primary,
-        })
+        if let (Some(root), Some(primary)) = (root, primary) {
+            let file = FileRef::new(reader);
+            let file2 = file.clone();
+            Ok(ISO9660 {
+                _file: file,
+                root: ISODirectory::new(root.0, root.1, file2, entry_reader),
+                primary,
+            })
+        } else {
+            Err(ISOError::InvalidFs("No primary volume descriptor"))
+        }
     }
 
     pub fn open(&self, path: &str) -> Result<Option<DirectoryEntry<T>>, ISOError<T::Error>> {

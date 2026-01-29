@@ -6,13 +6,14 @@ use core::fmt;
 
 use time::OffsetDateTime;
 
-use crate::parse::{DirectoryEntryHeader, FileFlags};
+use crate::parse::{DirectoryEntryHeader, DirectoryEntryReader, FileFlags};
 use crate::{DirectoryEntry, FileRef, ISO9660Reader, ISOError};
 
 pub struct ISODirectory<T: ISO9660Reader> {
     pub(crate) header: DirectoryEntryHeader,
     pub identifier: String,
     file: FileRef<T>,
+    reader: DirectoryEntryReader,
 }
 
 impl<T: ISO9660Reader> Clone for ISODirectory<T> {
@@ -21,6 +22,7 @@ impl<T: ISO9660Reader> Clone for ISODirectory<T> {
             header: self.header.clone(),
             identifier: self.identifier.clone(),
             file: self.file.clone(),
+            reader: self.reader,
         }
     }
 }
@@ -39,6 +41,7 @@ impl<T: ISO9660Reader> ISODirectory<T> {
         header: DirectoryEntryHeader,
         mut identifier: String,
         file: FileRef<T>,
+        reader: DirectoryEntryReader,
     ) -> ISODirectory<T> {
         if &identifier == "\u{0}" {
             identifier = ".".to_string();
@@ -50,6 +53,7 @@ impl<T: ISO9660Reader> ISODirectory<T> {
             header,
             identifier,
             file,
+            reader,
         }
     }
 
@@ -79,10 +83,10 @@ impl<T: ISO9660Reader> ISODirectory<T> {
             *buf_block_num = Some(block_num);
         }
 
-        let (header, identifier) = DirectoryEntryHeader::parse(&block[block_pos..])?;
+        let (header, identifier) = DirectoryEntryHeader::parse(&block[block_pos..], self.reader)?;
         block_pos += header.length as usize;
 
-        let entry = DirectoryEntry::new(header, identifier, self.file.clone())?;
+        let entry = DirectoryEntry::new(header, identifier, self.file.clone(), self.reader)?;
 
         // All bytes after the last directory entry are zero.
         if block_pos >= (2048 - 33) || block[block_pos] == 0 {
