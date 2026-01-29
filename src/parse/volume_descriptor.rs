@@ -19,50 +19,61 @@ use crate::ISOError;
 // frankly I think these variants should be holding a struct rather than
 // being struct variants. otherwise waste of space.
 #[allow(dead_code)]
+#[derive(Clone, Debug)]
+pub(crate) struct PrimaryVolumeDescriptor {
+    pub system_identifier: String,
+    pub volume_identifier: String,
+    pub volume_space_size: u32,
+    pub volume_set_size: u16,
+    pub volume_sequence_number: u16,
+    pub logical_block_size: u16,
+
+    pub path_table_size: u32,
+    pub path_table_loc: u32,
+    pub optional_path_table_loc: u32,
+
+    pub root_directory_entry: DirectoryEntryHeader,
+    pub root_directory_entry_identifier: String,
+
+    pub volume_set_identifier: String,
+    pub publisher_identifier: String,
+    pub data_preparer_identifier: String,
+    pub application_identifier: String,
+    pub copyright_file_identifier: String,
+    pub abstract_file_identifier: String,
+    pub bibliographic_file_identifier: String,
+
+    pub creation_time: OffsetDateTime,
+    pub modification_time: OffsetDateTime,
+    pub expiration_time: OffsetDateTime,
+    pub effective_time: OffsetDateTime,
+
+    pub file_structure_version: u8,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug)]
+pub(crate) struct BootRecordDescriptor {
+    pub boot_system_identifier: String,
+    pub boot_identifier: String,
+    pub data: Vec<u8>,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug)]
+pub(crate) struct SupplementaryVolumeDescriptor {
+    pub type_: u8,
+    pub version: u8,
+    pub flags: u8,
+    pub is_joliet: bool,
+}
+#[allow(dead_code)]
 #[allow(clippy::enum_variant_names)]
 #[derive(Clone, Debug)]
 pub(crate) enum VolumeDescriptor {
-    Primary {
-        system_identifier: String,
-        volume_identifier: String,
-        volume_space_size: u32,
-        volume_set_size: u16,
-        volume_sequence_number: u16,
-        logical_block_size: u16,
-
-        path_table_size: u32,
-        path_table_loc: u32,
-        optional_path_table_loc: u32,
-
-        root_directory_entry: DirectoryEntryHeader,
-        root_directory_entry_identifier: String,
-
-        volume_set_identifier: String,
-        publisher_identifier: String,
-        data_preparer_identifier: String,
-        application_identifier: String,
-        copyright_file_identifier: String,
-        abstract_file_identifier: String,
-        bibliographic_file_identifier: String,
-
-        creation_time: OffsetDateTime,
-        modification_time: OffsetDateTime,
-        expiration_time: OffsetDateTime,
-        effective_time: OffsetDateTime,
-
-        file_structure_version: u8,
-    },
-    BootRecord {
-        boot_system_identifier: String,
-        boot_identifier: String,
-        data: Vec<u8>,
-    },
-    SupplementaryVolumeDescriptor {
-        type_: u8,
-        version: u8,
-        flags: u8,
-        is_joliet: bool,
-    },
+    Primary(PrimaryVolumeDescriptor),
+    BootRecord(BootRecordDescriptor),
+    SupplementaryVolumeDescriptor(SupplementaryVolumeDescriptor),
     VolumeDescriptorSetTerminator,
 }
 
@@ -92,12 +103,12 @@ pub fn supplementary_volume_descriptor(input: &[u8]) -> IResult<&[u8], VolumeDes
 
     Ok((
         input,
-        VolumeDescriptor::SupplementaryVolumeDescriptor {
+        VolumeDescriptor::SupplementaryVolumeDescriptor(SupplementaryVolumeDescriptor {
             type_,
             version,
             flags,
             is_joliet,
-        },
+        }),
     ))
 }
 //
@@ -144,11 +155,11 @@ fn boot_record(i: &[u8]) -> IResult<&[u8], VolumeDescriptor> {
     ))(i)?;
     Ok((
         i,
-        VolumeDescriptor::BootRecord {
+        VolumeDescriptor::BootRecord(BootRecordDescriptor {
             boot_system_identifier,
             boot_identifier,
             data: data.to_vec(),
-        },
+        }),
     ))
 }
 
@@ -201,7 +212,7 @@ fn primary_descriptor(i: &[u8]) -> IResult<&[u8], VolumeDescriptor> {
 
     Ok((
         i,
-        VolumeDescriptor::Primary {
+        VolumeDescriptor::Primary(PrimaryVolumeDescriptor {
             system_identifier,
             volume_identifier,
             volume_space_size,
@@ -230,6 +241,6 @@ fn primary_descriptor(i: &[u8]) -> IResult<&[u8], VolumeDescriptor> {
             effective_time,
 
             file_structure_version,
-        },
+        }),
     ))
 }

@@ -34,8 +34,8 @@ pub struct ISO9660<T: ISO9660Reader> {
 macro_rules! primary_prop_str {
     ($name:ident) => {
         pub fn $name(&self) -> &str {
-            if let VolumeDescriptor::Primary { $name, .. } = &self.primary {
-                &$name
+            if let VolumeDescriptor::Primary(primary) = &self.primary {
+                &primary.$name
             } else {
                 unreachable!()
             }
@@ -62,13 +62,8 @@ impl<T: ISO9660Reader> ISO9660<T> {
 
             let descriptor = VolumeDescriptor::parse(&buf)?;
             match &descriptor {
-                Some(VolumeDescriptor::Primary {
-                    logical_block_size,
-                    root_directory_entry,
-                    root_directory_entry_identifier,
-                    ..
-                }) => {
-                    if *logical_block_size != 2048 {
+                Some(VolumeDescriptor::Primary(primary_descriptor)) => {
+                    if primary_descriptor.logical_block_size != 2048 {
                         // This is almost always the case, but technically
                         // not guaranteed by the standard.
                         // TODO: Implement this
@@ -76,8 +71,8 @@ impl<T: ISO9660Reader> ISO9660<T> {
                     }
 
                     root = Some((
-                        root_directory_entry.clone(),
-                        root_directory_entry_identifier.clone(),
+                        primary_descriptor.root_directory_entry.clone(),
+                        primary_descriptor.root_directory_entry_identifier.clone(),
                     ));
                     primary = descriptor;
                 }
