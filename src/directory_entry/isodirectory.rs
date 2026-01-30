@@ -67,7 +67,7 @@ impl<T: ISO9660Reader> ISODirectory<T> {
         block: &mut [u8; 2048],
         buf_block_num: &mut Option<u64>,
         offset: u64,
-    ) -> Result<(DirectoryEntry<T>, Option<u64>), ISOError<T::Error>> {
+    ) -> Result<(DirectoryEntry<T>, Option<u64>), ISOError<ReaderError!(T)>> {
         let mut block_num = offset / 2048;
         let mut block_pos = (offset % 2048) as usize;
 
@@ -116,7 +116,10 @@ impl<T: ISO9660Reader> ISODirectory<T> {
         self.header.time
     }
 
-    pub fn find(&self, identifier: &str) -> Result<Option<DirectoryEntry<T>>, ISOError<T::Error>> {
+    pub fn find(
+        &self,
+        identifier: &str,
+    ) -> Result<Option<DirectoryEntry<T>>, ISOError<ReaderError!(T)>> {
         for entry in self.contents() {
             let entry = entry?;
             if entry
@@ -134,7 +137,7 @@ impl<T: ISO9660Reader> ISODirectory<T> {
         Ok(None)
     }
 
-    pub fn open(&self, path: &str) -> Result<Option<DirectoryEntry<T>>, ISOError<T::Error>> {
+    pub fn open(&self, path: &str) -> Result<Option<DirectoryEntry<T>>, ISOError<ReaderError!(T)>> {
         // TODO: avoid clone()
         let mut entry = DirectoryEntry::Directory(self.clone());
         for segment in path.split('/').filter(|x| !x.is_empty()) {
@@ -161,7 +164,7 @@ pub struct ISODirectoryIterator<'a, T: ISO9660Reader> {
 }
 
 impl<'a, T: ISO9660Reader> Iterator for ISODirectoryIterator<'a, T> {
-    type Item = Result<DirectoryEntry<T>, ISOError<T::Error>>;
+    type Item = Result<DirectoryEntry<T>, ISOError<ReaderError!(T)>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let offset = self.next_offset?;

@@ -28,6 +28,14 @@ fuser = "0.13"
 libc = "0.2"
 
 [features]
-default = ["std", "joliet"]
+default = ["joliet"]
 joliet = []
-std = ["embedded-io/std"]
+std = ["embedded-io/std", "time/std"]
+
+[[example]]
+name = "print_file_std"
+required-features = ["std", "joliet"]
+
+[[example]]
+name = "iso_fuse_std"
+required-features = ["std", "joliet"]

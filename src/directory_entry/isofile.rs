@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: (MIT OR Apache-2.0)
 
+use crate::io;
 use alloc::str::FromStr;
 use alloc::string::String;
 use core::cmp::min;
 use core::fmt;
-use embedded_io::Read;
-use embedded_io::{Seek, SeekFrom, Write};
 
 use time::OffsetDateTime;
 
@@ -36,7 +35,7 @@ impl<T: ISO9660Reader> ISOFile<T> {
         header: DirectoryEntryHeader,
         mut identifier: String,
         file: FileRef<T>,
-    ) -> Result<ISOFile<T>, ISOError<T::Error>> {
+    ) -> Result<ISOFile<T>, ISOError<ReaderError!(T)>> {
         // Files (not directories) in ISO 9660 have a version number, which is
         // provided at the end of the identifier, seperated by ';'.
         // If not, assume 1.
@@ -91,12 +90,14 @@ pub struct ISOFileReader<T: ISO9660Reader> {
     file: FileRef<T>,
 }
 
-impl<T: ISO9660Reader> embedded_io::ErrorType for ISOFileReader<T> {
+#[cfg(not(feature = "std"))]
+impl<T: ISO9660Reader> io::ErrorType for ISOFileReader<T> {
     type Error = T::Error;
 }
 
-impl<T: ISO9660Reader> Read for ISOFileReader<T> {
-    fn read(&mut self, mut buf: &mut [u8]) -> core::result::Result<usize, T::Error> {
+impl<T: ISO9660Reader> io::Read for ISOFileReader<T> {
+    fn read(&mut self, mut buf: &mut [u8]) -> core::result::Result<usize, ReaderError!(T)> {
+        use crate::io::Write as _;
         let mut seek = self.seek;
         while !buf.is_empty() && seek < self.size {
             let lba = self.start_lba as u64 + (seek as u64 / 2048);
@@ -114,16 +115,14 @@ impl<T: ISO9660Reader> Read for ISOFileReader<T> {
         self.seek = seek;
         Ok(bytes)
     }
-
-    // TODO implement `read_buf` on nightly
 }
 
-impl<T: ISO9660Reader> Seek for ISOFileReader<T> {
-    fn seek(&mut self, pos: SeekFrom) -> core::result::Result<u64, T::Error> {
+impl<T: ISO9660Reader> io::Seek for ISOFileReader<T> {
+    fn seek(&mut self, pos: io::SeekFrom) -> core::result::Result<u64, ReaderError!(T)> {
         let seek = match pos {
-            SeekFrom::Start(pos) => pos as i64,
-            SeekFrom::End(pos) => self.size as i64 + pos,
-            SeekFrom::Current(pos) => self.seek as i64 + pos,
+            io::SeekFrom::Start(pos) => pos as i64,
+            io::SeekFrom::End(pos) => self.size as i64 + pos,
+            io::SeekFrom::Current(pos) => self.seek as i64 + pos,
         };
 
         if seek < 0 {

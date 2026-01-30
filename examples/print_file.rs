@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: (MIT OR Apache-2.0)
-
 extern crate iso9660;
 
 use embedded_io::Read;
@@ -9,22 +8,42 @@ use std::{env, process};
 
 use iso9660::{DirectoryEntry, ISO9660};
 
+#[derive(Debug)]
+struct MyError(std::io::Error);
+impl core::error::Error for MyError {}
+impl embedded_io::Error for MyError {
+    fn kind(&self) -> embedded_io::ErrorKind {
+        embedded_io::ErrorKind::Other
+    }
+}
+impl core::fmt::Display for MyError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{:?}", self.0)
+    }
+}
+
 struct MyFile(File);
 impl embedded_io::ErrorType for MyFile {
-    type Error = std::io::Error;
+    type Error = MyError;
 }
 
 impl embedded_io::Read for MyFile {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
-        self.0.read(buf)
+        self.0.read(buf).map_err(MyError)
     }
 }
 impl embedded_io::Seek for MyFile {
     fn seek(&mut self, pos: embedded_io::SeekFrom) -> Result<u64, Self::Error> {
-        self.0.seek(pos.into())
+        let seek = match pos {
+            embedded_io::SeekFrom::Start(i) => io::SeekFrom::Start(i),
+            embedded_io::SeekFrom::End(i) => io::SeekFrom::End(i),
+            embedded_io::SeekFrom::Current(i) => io::SeekFrom::Current(i),
+        };
+        self.0.seek(seek).map_err(MyError)
     }
 }
 
+#[cfg(not(feature = "std"))]
 fn main() {
     let args = env::args();
 
@@ -42,7 +61,7 @@ fn main() {
     match fs.open(&file_path).unwrap() {
         Some(DirectoryEntry::File(file)) => {
             let mut stdout = io::stdout();
-            let mut buf = vec![0; 200];
+            let mut buf = vec![0; file.size() as usize];
             let mut reader = file.read();
             dbg!(reader.read(&mut buf).unwrap());
 

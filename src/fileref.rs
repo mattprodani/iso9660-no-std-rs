@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: (MIT OR Apache-2.0)
 
+use crate::io::{ErrorType, Read, Seek, SeekFrom};
 use alloc::rc::Rc;
 use core::cell::RefCell;
-use embedded_io::{ErrorType, Read, Seek, SeekFrom};
 
 pub trait ISO9660Reader: ErrorType {
     /// Read the block(s) at a given LBA (logical block address)
-    fn read_at(&mut self, buf: &mut [u8], lba: u64) -> Result<usize, Self::Error>;
+    fn read_at(&mut self, buf: &mut [u8], lba: u64) -> Result<usize, ReaderError!(Self)>;
 }
 
 impl<T: Read + Seek> ISO9660Reader for T {
-    // default fn read_at(&mut self, buf: &mut [u8], lba: u64) -> Result<usize, T::Error> {
-    fn read_at(&mut self, buf: &mut [u8], lba: u64) -> Result<usize, Self::Error> {
+    fn read_at(&mut self, buf: &mut [u8], lba: u64) -> Result<usize, ReaderError!(Self)> {
         self.seek(SeekFrom::Start(lba * 2048))?;
         self.read(buf)
     }
@@ -32,7 +31,7 @@ impl<T: ISO9660Reader> FileRef<T> {
     }
 
     /// Read the block(s) at a given LBA (logical block address)
-    pub fn read_at(&self, buf: &mut [u8], lba: u64) -> Result<usize, T::Error> {
+    pub fn read_at(&self, buf: &mut [u8], lba: u64) -> Result<usize, ReaderError!(T)> {
         (*self.0).borrow_mut().read_at(buf, lba)
     }
 }

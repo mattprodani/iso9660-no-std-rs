@@ -1,29 +1,30 @@
-#![no_std]
 // SPDX-License-Identifier: (MIT OR Apache-2.0)
+#![no_std]
 
-// #![cfg_attr(feature = "nightly", feature(min_specialization))]
+#[cfg(feature = "std")]
+extern crate std;
 
-extern crate time;
 #[macro_use]
 extern crate bitflags;
-extern crate nom;
-
 extern crate alloc;
+extern crate nom;
+extern crate time;
 
-pub use directory_entry::{
-    DirectoryEntry, ISODirectory, ISODirectoryIterator, ISOFile, ISOFileReader,
-};
+#[macro_use]
+// re-exports, etc..
+pub mod io;
+
+pub use directory_entry::{DirectoryEntry, ISODirectory};
 pub use error::ISOError;
 pub(crate) use fileref::FileRef;
 pub use fileref::ISO9660Reader;
-use parse::{DirectoryEntryReader, VolumeDescriptor};
 
 mod directory_entry;
 mod error;
 mod fileref;
 mod parse;
 
-pub use embedded_io as io;
+use parse::{DirectoryEntryReader, VolumeDescriptor};
 
 pub struct ISO9660<T: ISO9660Reader> {
     _file: FileRef<T>,
@@ -44,7 +45,7 @@ macro_rules! primary_prop_str {
 }
 
 impl<T: ISO9660Reader> ISO9660<T> {
-    pub fn new(mut reader: T) -> Result<ISO9660<T>, ISOError<T::Error>> {
+    pub fn new(mut reader: T) -> Result<ISO9660<T>, ISOError<ReaderError!(T)>> {
         let mut buf: [u8; 2048] = [0; 2048];
         let mut root = None;
         let mut primary = None;
@@ -107,7 +108,7 @@ impl<T: ISO9660Reader> ISO9660<T> {
         }
     }
 
-    pub fn open(&self, path: &str) -> Result<Option<DirectoryEntry<T>>, ISOError<T::Error>> {
+    pub fn open(&self, path: &str) -> Result<Option<DirectoryEntry<T>>, ISOError<ReaderError!(T)>> {
         // TODO: avoid clone()
         let mut entry = DirectoryEntry::Directory(self.root.clone());
         for segment in path.split('/').filter(|x| !x.is_empty()) {

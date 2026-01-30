@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: (MIT OR Apache-2.0)
 
-pub use self::isodirectory::{ISODirectory, ISODirectoryIterator};
-pub use self::isofile::{ISOFile, ISOFileReader};
+pub use self::isodirectory::ISODirectory;
+pub use self::isofile::ISOFile;
 
 use crate::parse::DirectoryEntryReader;
 use crate::parse::{DirectoryEntryHeader, FileFlags};
@@ -23,7 +23,7 @@ impl<T: ISO9660Reader> DirectoryEntry<T> {
         identifier: String,
         file: FileRef<T>,
         reader: DirectoryEntryReader,
-    ) -> Result<Self, ISOError<T::Error>> {
+    ) -> Result<Self, ISOError<ReaderError!(T)>> {
         if header.file_flags.contains(FileFlags::DIRECTORY) {
             Ok(DirectoryEntry::Directory(ISODirectory::new(
                 header, identifier, file, reader,

@@ -6,21 +6,40 @@ extern crate md5;
 use iso9660::io::Read;
 use iso9660::{DirectoryEntry, ISO9660};
 use std::fs::File;
-use std::io::{Read as _, Seek as _};
+use std::io::{self, Read as _, Seek as _};
+
+#[derive(Debug)]
+struct MyError(std::io::Error);
+impl core::error::Error for MyError {}
+impl embedded_io::Error for MyError {
+    fn kind(&self) -> embedded_io::ErrorKind {
+        embedded_io::ErrorKind::Other
+    }
+}
+impl core::fmt::Display for MyError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{:?}", self.0)
+    }
+}
 
 struct MyFile(File);
 impl embedded_io::ErrorType for MyFile {
-    type Error = std::io::Error;
+    type Error = MyError;
 }
 
 impl embedded_io::Read for MyFile {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
-        self.0.read(buf)
+        self.0.read(buf).map_err(MyError)
     }
 }
 impl embedded_io::Seek for MyFile {
     fn seek(&mut self, pos: embedded_io::SeekFrom) -> Result<u64, Self::Error> {
-        self.0.seek(pos.into())
+        let seek = match pos {
+            embedded_io::SeekFrom::Start(i) => io::SeekFrom::Start(i),
+            embedded_io::SeekFrom::End(i) => io::SeekFrom::End(i),
+            embedded_io::SeekFrom::Current(i) => io::SeekFrom::Current(i),
+        };
+        self.0.seek(seek).map_err(MyError)
     }
 }
 

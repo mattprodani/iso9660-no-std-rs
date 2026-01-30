@@ -3,26 +3,43 @@
 extern crate iso9660;
 
 use std::fs::File;
-use std::io::{Read as _, Seek as _};
+use std::io::{self, Read as _, Seek as _};
 use std::{env, process};
 
 use iso9660::{DirectoryEntry, ISO9660Reader, ISODirectory, ISO9660};
 
+#[derive(Debug)]
+struct MyError(std::io::Error);
+impl core::error::Error for MyError {}
+impl embedded_io::Error for MyError {
+    fn kind(&self) -> embedded_io::ErrorKind {
+        embedded_io::ErrorKind::Other
+    }
+}
+impl core::fmt::Display for MyError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{:?}", self.0)
+    }
+}
+
 struct MyFile(File);
 impl embedded_io::ErrorType for MyFile {
-    type Error = embedded_io::ErrorKind;
+    type Error = MyError;
 }
 
 impl embedded_io::Read for MyFile {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, embedded_io::ErrorKind> {
-        self.0.read(buf).map_err(|_| embedded_io::ErrorKind::Other)
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+        self.0.read(buf).map_err(MyError)
     }
 }
 impl embedded_io::Seek for MyFile {
     fn seek(&mut self, pos: embedded_io::SeekFrom) -> Result<u64, Self::Error> {
-        self.0
-            .seek(pos.into())
-            .map_err(|_| embedded_io::ErrorKind::Other)
+        let seek = match pos {
+            embedded_io::SeekFrom::Start(i) => io::SeekFrom::Start(i),
+            embedded_io::SeekFrom::End(i) => io::SeekFrom::End(i),
+            embedded_io::SeekFrom::Current(i) => io::SeekFrom::Current(i),
+        };
+        self.0.seek(seek).map_err(MyError)
     }
 }
 

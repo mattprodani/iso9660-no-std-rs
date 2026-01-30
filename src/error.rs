@@ -8,7 +8,6 @@ use core::num::ParseIntError;
 #[derive(Debug)]
 pub enum ISOError<T> {
     Io(T),
-    Eio(embedded_io::ErrorKind),
     Utf8(str::Utf8Error),
     InvalidFs(&'static str),
     ParseInt(ParseIntError),
@@ -20,7 +19,6 @@ impl<T: core::fmt::Debug> Display for ISOError<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             ISOError::Io(ref err) => write!(f, "IO error: {:?}", err),
-            ISOError::Eio(ref err) => write!(f, "IO error: {}", err),
             ISOError::Utf8(ref err) => write!(f, "UTF8 error: {}", err),
             ISOError::InvalidFs(msg) => write!(f, "Invalid ISO9660: {}", msg),
             ISOError::ParseInt(ref err) => write!(f, "Int parse error: {}", err),
@@ -55,8 +53,6 @@ macro_rules! impl_from_error {
     };
 }
 
-// impl_from_error!(io::Error, ISOError::Io);
-impl_from_error!(embedded_io::ErrorKind, ISOError::Eio);
 impl_from_error!(str::Utf8Error, ISOError::Utf8);
 impl_from_error!(ParseIntError, ISOError::ParseInt);
 
