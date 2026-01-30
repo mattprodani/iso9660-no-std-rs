@@ -1,11 +1,14 @@
 [package]
-name = "iso9660"
-description = "(Incomplete) implementation of ISO9660 filesystem"
+name = "iso9660-no-std"
+description = "No-std implementation of ISO9660 filesystem"
 version = "0.1.1"
-authors = ["Ian Douglas Scott <ian@iandouglasscott.com>"]
+authors = ["Ian Douglas Scott <ian@iandouglasscott.com>", "Matt Prodani<mattp@hey.com>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/ids1024/iso9660-rs"
+repository = "https://github.com/mattprod/iso9660-no-std"
+readme = "README.md"
+categories = ["embedded", "filesystem", "no-std"]
+keywords = ["no-std", "iso9660", "joliet"]
 
 [dependencies]
 bitflags = "2.0"
