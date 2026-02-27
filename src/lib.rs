@@ -14,7 +14,7 @@ extern crate time;
 // re-exports, etc..
 pub mod io;
 
-pub use directory_entry::{DirectoryEntry, ISODirectory};
+pub use directory_entry::{DirectoryEntry, ISODirectory, ISOFile};
 pub use error::ISOError;
 pub(crate) use fileref::FileRef;
 pub use fileref::ISO9660Reader;
