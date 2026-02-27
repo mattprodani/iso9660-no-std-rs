@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: (MIT OR Apache-2.0)
 
-extern crate iso9660;
+extern crate iso9660_no_std;
 extern crate md5;
 
-use iso9660::io::Read;
-use iso9660::{DirectoryEntry, ISO9660};
+use iso9660_no_std::io::Read;
+use iso9660_no_std::{DirectoryEntry, ISO9660};
 use std::fs::File;
 use std::io::{self, Read as _, Seek as _};
 

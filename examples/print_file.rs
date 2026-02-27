@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: (MIT OR Apache-2.0)
-extern crate iso9660;
+extern crate iso9660_no_std;
 
 use embedded_io::Read;
 use std::fs::File;
 use std::io::{self, Read as _, Seek as _, Write as _};
 use std::{env, process};
 
-use iso9660::{DirectoryEntry, ISO9660};
+use iso9660_no_std::{DirectoryEntry, ISO9660};
 
 #[derive(Debug)]
 struct MyError(std::io::Error);
