@@ -27,7 +27,6 @@ default-features = false
 
 [dev-dependencies]
 md5 = "0.7"
-fuser = "0.13"
 libc = "0.2"
 
 [features]
@@ -37,8 +36,4 @@ std = ["embedded-io/std", "time/std"]
 
 [[example]]
 name = "print_file_std"
-required-features = ["std", "joliet"]
-
-[[example]]
-name = "iso_fuse_std"
 required-features = ["std", "joliet"]
